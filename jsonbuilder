@@ -1,0 +1,75 @@
+#include <string>
+#include "yyjson.h"
+
+class JsonRpcResponse {
+public:
+    // IDは int, string, または null (IDなしの場合は負の値や空文字で判定)
+    JsonRpcResponse(int id) : doc(yyjson_mut_doc_new(NULL)) {
+        root = yyjson_mut_obj(doc);
+        yyjson_mut_doc_set_root(doc, root);
+        
+        yyjson_mut_obj_add_str(doc, root, "jsonrpc", "2.0");
+        yyjson_mut_obj_add_int(doc, root, "id", id);
+    }
+
+    // 文字列ID用オーバーロード
+    JsonRpcResponse(const std::string& id) : doc(yyjson_mut_doc_new(NULL)) {
+        root = yyjson_mut_obj(doc);
+        yyjson_mut_doc_set_root(doc, root);
+        
+        yyjson_mut_obj_add_str(doc, root, "jsonrpc", "2.0");
+        yyjson_mut_obj_add_str(doc, root, "id", id.c_str());
+    }
+
+    ~JsonRpcResponse() {
+        if (doc) yyjson_mut_doc_free(doc);
+    }
+
+    // --- 成功レスポンス用 ---
+    void setResult(const std::string& value) {
+        yyjson_mut_obj_add_str(doc, root, "result", value.c_str());
+    }
+
+    void setResult(int value) {
+        yyjson_mut_obj_add_int(doc, root, "result", value);
+    }
+
+    void setResult(bool value) {
+        yyjson_mut_obj_add_bool(doc, root, "result", value);
+    }
+
+    // --- エラーレスポンス用 ---
+    void setError(int code, const std::string& message) {
+        yyjson_mut_val* err_obj = yyjson_mut_obj(doc);
+        yyjson_mut_obj_add_int(doc, err_obj, "code", code);
+        yyjson_mut_obj_add_str(doc, err_obj, "message", message.c_str());
+        yyjson_mut_obj_add_val(doc, root, "error", err_obj);
+    }
+
+    // 文字列としてシリアライズ
+    std::string serialize(bool pretty = false) {
+        size_t len = 0;
+        yyjson_write_flag flg = pretty ? YYJSON_WRITE_PRETTY : YYJSON_WRITE_NOFLAG;
+        char *json = yyjson_mut_write(doc, flg, &len);
+        if (!json) return "";
+
+        std::string result(json, len);
+        free(json);
+        return result;
+    }
+
+private:
+    yyjson_mut_doc *doc;
+    yyjson_mut_val *root;
+
+    // コピー禁止
+    JsonRpcResponse(const JsonRpcResponse&);
+    JsonRpcResponse& operator=(const JsonRpcResponse&);
+};
+
+JsonRpcResponse res(101);
+res.setError(-32601, "Method not found");
+std::string output = res.serialize();
+// {"jsonrpc":"2.0","id":101,"error":{"code":-32601,"message":"Method not found"}}
+
+
